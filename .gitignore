@@ -1,2 +1,3 @@
 harmonics/*.csv
-data/*
+data/*.json
+.vscode
