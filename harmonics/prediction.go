@@ -2,7 +2,9 @@ package harmonics
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/ryan-lang/tides/astronomy"
@@ -10,13 +12,16 @@ import (
 
 type (
 	Prediction struct {
-		Timeline     Timeline
-		Start        time.Time
-		Constituents []*HarmonicConstituent
+		Start     time.Time
+		End       time.Time
+		Interval  time.Duration
+		Harmonics *Harmonics
+		Datum     string
+		Units     string
 	}
+	PredictionOpt   func(*Prediction)
 	PredictionValue struct {
 		Time  time.Time
-		Hour  float64
 		Level float64
 	}
 	PredictionExtremaValue struct {
@@ -25,8 +30,7 @@ type (
 		Type  string
 	}
 	Timeline struct {
-		Times        []time.Time
-		ElapsedHours []float64
+		Times []time.Time
 	}
 	TideExtrema struct {
 		Time  time.Time
@@ -35,17 +39,40 @@ type (
 	}
 )
 
-func (p *Prediction) GetTimelinePrediction() []PredictionValue {
-	results := make([]PredictionValue, 0)
+const (
+	METERS_TO_FEET   = 3.28084
+	PREDICTION_DATUM = "MTL"
+)
+
+func WithDatum(datum string) PredictionOpt {
+	return func(p *Prediction) {
+		p.Datum = datum
+	}
+}
+
+func WithUnits(units string) PredictionOpt {
+	return func(p *Prediction) {
+		p.Units = units
+	}
+}
+
+func WithInterval(interval time.Duration) PredictionOpt {
+	return func(p *Prediction) {
+		p.Interval = interval
+	}
+}
+
+func (p *Prediction) Predict() []*PredictionValue {
+	results := make([]*PredictionValue, 0)
 	harmonicResults, harmonicFactors := p.prepare()
 
-	for i, time := range p.Timeline.Times {
-		hour := p.Timeline.ElapsedHours[i]
-		level := p.getLevel(hour, harmonicResults, harmonicFactors[i])
+	for i, time := range p.timeline().Times {
+		hoursSinceStart := time.Sub(p.Start).Seconds() / 3600
+		//fmt.Printf("time: %s, hoursSinceStart: %f\n", time, hoursSinceStart)
+		level := p.getLevel(hoursSinceStart, harmonicResults, harmonicFactors[i])
 
-		results = append(results, PredictionValue{
+		results = append(results, &PredictionValue{
 			Time:  time,
-			Hour:  hour,
 			Level: level,
 		})
 	}
@@ -53,41 +80,45 @@ func (p *Prediction) GetTimelinePrediction() []PredictionValue {
 	return results
 }
 
-func (p *Prediction) GetHighLowPrediction() []PredictionExtremaValue {
+func (p *Prediction) PredictExtrema() []*PredictionExtremaValue {
 	return p.getExtrema(0)
 }
 
-func (p *Prediction) GetLowsPrediction() []PredictionExtremaValue {
-	return nil
+func (p *Prediction) PredictLows() []*PredictionExtremaValue {
+	extrema := p.getExtrema(0)
+	results := make([]*PredictionExtremaValue, 0)
+	for _, ex := range extrema {
+		if ex.Type == "L" {
+			results = append(results, ex)
+		}
+	}
+	return results
 }
 
-func (p *Prediction) GetHighsPrediction() []PredictionExtremaValue {
-	// results := make([]PredictionHighLowValue, 0)
-	// for _, ex := range p.getExtrema(0) {
-	// 	if ex.Type == "H" {
-	// 		results = append(results, PredictionHighLowValue{
-	// 			Time:  ex.Time,
-	// 			Level: ex.Level,
-	// 			Type:  "H",
-	// 		})
-	// 	}
-	// }
-	// return results
-
-	return nil
+func (p *Prediction) PredictHighs() []*PredictionExtremaValue {
+	extrema := p.getExtrema(0)
+	results := make([]*PredictionExtremaValue, 0)
+	for _, ex := range extrema {
+		if ex.Type == "H" {
+			results = append(results, ex)
+		}
+	}
+	return results
 }
 
 func (p *Prediction) getLevel(hour float64, harmonicResults *harmonicResults, harmonicFactors *harmonicFactors) float64 {
 	amplitudes := make([]float64, 0)
 	result := 0.0
 
-	for _, constituent := range p.Constituents {
+	for _, constituent := range p.Harmonics.Constituents {
 		amplitude := constituent.Amplitude
 		phase := constituent.PhaseUTC * astronomy.DEG_TO_RAD
 		f := harmonicFactors.forms[constituent.Name]
 		speed := harmonicResults.speeds[constituent.Name]
 		u := harmonicFactors.nodes[constituent.Name]
 		V0 := harmonicResults.values[constituent.Name]
+		//fmt.Printf("constituent: %s, amplitude: %f, phase: %f, f: %f, speed: %f, u: %f, V0: %f\n", constituent.Name, amplitude, phase, f, speed, u, V0)
+
 		amplitudes = append(amplitudes, amplitude*f*math.Cos(speed*hour+(V0+u)-phase))
 	}
 
@@ -95,12 +126,24 @@ func (p *Prediction) getLevel(hour float64, harmonicResults *harmonicResults, ha
 		result += item
 	}
 
+	if p.Datum != "" && !strings.EqualFold(p.Datum, PREDICTION_DATUM) {
+		datum, err := p.Harmonics.DatumConvert(PREDICTION_DATUM, p.Datum, result)
+		if err != nil {
+			log.Fatalf("Error converting datum: %s", err.Error())
+		}
+		result = datum
+	}
+
+	if p.Units == "ft" {
+		result = result * METERS_TO_FEET
+	}
+
 	return result
 }
 
 // "partition" is partition hours; the number of hours for which we consider the node factors to be constant
-func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
-	extrema := make([]PredictionExtremaValue, 0)
+func (p *Prediction) getExtrema(partition float64) []*PredictionExtremaValue {
+	extrema := make([]*PredictionExtremaValue, 0)
 
 	if partition == 0 {
 		partition = 2400.0
@@ -115,20 +158,20 @@ func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
 	intervalCount := int(math.Ceil((partition+offset)/delta)) + 1
 
 	start := p.Start
-	for start.Before(p.End()) {
+	for start.Before(p.End) {
 		end := start.Add(time.Duration(partition) * time.Hour)
 
 		// get the harmonic results at the start of the partition, and the
 		// factor results for the first half of the partition
 		// TODO: why first half??
-		harmonicResults := harmonicResultsAtTime(p.Constituents, start)
-		factorResults := harmonicFactorsForRange(p.Constituents, Timeline{Times: []time.Time{start.Add(time.Duration(partition*0.5) * time.Hour)}})
+		harmonicResults := harmonicResultsAtTime(p.Harmonics.Constituents, start)
+		factorResults := harmonicFactorsForRange(p.Harmonics.Constituents, Timeline{Times: []time.Time{start.Add(time.Duration(partition*0.5) * time.Hour)}})
 
 		// derivative functions d and d2 do not include time dependence of u or f
 		// but they change slowly enough for that to be okay within our partition
 		d := func(t float64) float64 {
 			var sum float64
-			for _, c := range p.Constituents {
+			for _, c := range p.Harmonics.Constituents {
 				speed := harmonicResults.speeds[c.Name]
 				amplitude := c.Amplitude
 				phase := c.PhaseUTC * astronomy.DEG_TO_RAD // TODO: degtorad here??
@@ -141,7 +184,7 @@ func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
 		}
 		d2 := func(t float64) float64 {
 			var sum float64
-			for _, c := range p.Constituents {
+			for _, c := range p.Harmonics.Constituents {
 				speed := harmonicResults.speeds[c.Name]
 				amplitude := c.Amplitude
 				phase := c.PhaseUTC * astronomy.DEG_TO_RAD // TODO: degtorad here??
@@ -158,7 +201,7 @@ func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
 			b := float64(i+1)*delta - offset
 			aTime := start.Add(time.Duration(a) * time.Hour)
 
-			if aTime.After(p.End()) {
+			if aTime.After(p.End) {
 				break
 			}
 
@@ -174,7 +217,7 @@ func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
 					hilo = "H"
 				}
 				if extremaTime.After(start) {
-					extrema = append(extrema, PredictionExtremaValue{Time: extremaTime, Level: level, Type: hilo})
+					extrema = append(extrema, &PredictionExtremaValue{Time: extremaTime, Level: level, Type: hilo})
 				}
 			}
 		}
@@ -186,28 +229,33 @@ func (p *Prediction) getExtrema(partition float64) []PredictionExtremaValue {
 }
 
 func (p *Prediction) prepare() (*harmonicResults, []*harmonicFactors) {
-	harmonicResults := harmonicResultsAtTime(p.Constituents, p.Start)
-	harmonicFactors := harmonicFactorsForRange(p.Constituents, p.Timeline)
+	harmonicResults := harmonicResultsAtTime(p.Harmonics.Constituents, p.Start)
+	harmonicFactors := harmonicFactorsForRange(p.Harmonics.Constituents, p.timeline())
 	return harmonicResults, harmonicFactors
 }
 
-func (p *Prediction) End() time.Time {
-	return p.Timeline.Times[len(p.Timeline.Times)-1]
-}
+func (p *Prediction) timeline() Timeline {
+	var timeline Timeline
 
-func MakeTimeline(start, end time.Time, interval time.Duration) Timeline {
+	start := p.Start
+	end := p.End
+	interval := p.Interval
+
+	// handle single-point timeline
+	if start.Equal(end) {
+		timeline.Times = append(timeline.Times, start)
+		return timeline
+	}
+
 	if interval == 0 {
 		interval = 10 * time.Minute // default to 10 minutes if not provided
 	}
 
-	var timeline Timeline
 	startTime := start.Unix()
 	endTime := end.Unix()
 
 	for lastTime := startTime; lastTime < endTime; lastTime += int64(interval.Seconds()) {
 		timeline.Times = append(timeline.Times, time.Unix(lastTime, 0))
-		elapsedHours := float64(lastTime-startTime) / 3600.0 // converting seconds to hours
-		timeline.ElapsedHours = append(timeline.ElapsedHours, elapsedHours)
 	}
 
 	return timeline
@@ -233,7 +281,7 @@ func (p *Prediction) calculateMinDelta(t time.Time) float64 {
 	minDelta := math.MaxFloat64
 	astro := &astronomy.Astro{Time: t}
 
-	for _, c := range p.Constituents {
+	for _, c := range p.Harmonics.Constituents {
 		speed := c.Model.Speed(astro)
 		if speed != 0 {
 			delta := 90.0 / speed

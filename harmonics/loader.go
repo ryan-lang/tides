@@ -2,28 +2,32 @@ package harmonics
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 
 	"github.com/ryan-lang/tides/constituents"
 )
 
-func LoadHarmonicConstituentsFromFile(filePath string) ([]*HarmonicConstituent, error) {
+type (
+	StationDocument struct {
+		HarmonicConstituents []*HarmonicConstituent `json:"harmonic_constituents"`
+		Datums               []*Datum               `json:"datums"`
+	}
+)
+
+func LoadFromFile(filePath string) (*Harmonics, error) {
 
 	// read the file
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("error opening harmonic constituents file: %s", err)
+		return nil, err
 	}
 
 	// parse the json
-	var doc struct {
-		HarmonicConstituents []*HarmonicConstituent `json:"harmonic_constituents"`
-	}
+	var doc StationDocument
 	err = json.NewDecoder(f).Decode(&doc)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing harmonic constituents json: %s", err)
+		return nil, err
 	}
 
 	// associate each constituent with its model
@@ -31,7 +35,10 @@ func LoadHarmonicConstituentsFromFile(filePath string) ([]*HarmonicConstituent, 
 		c.Model = GetConstituentForName(c.Name)
 	}
 
-	return doc.HarmonicConstituents, nil
+	return &Harmonics{
+		Constituents: doc.HarmonicConstituents,
+		Datums:       doc.Datums,
+	}, nil
 }
 
 func GetConstituentForName(name string) HarmonicConstituentModel {

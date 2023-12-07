@@ -1,9 +1,10 @@
-package cmd
+package root
 
 import (
 	"os"
 
-	"github.com/ryan-lang/tides/cmd/download"
+	"github.com/ryan-lang/tides/cmd/root/download"
+	"github.com/ryan-lang/tides/cmd/root/predict"
 	"github.com/spf13/cobra"
 )
 
@@ -42,4 +43,5 @@ func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 	rootCmd.AddCommand(download.DownloadCmd)
+	rootCmd.AddCommand(predict.PredictCmd)
 }

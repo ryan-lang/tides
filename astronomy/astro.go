@@ -3,6 +3,8 @@ package astronomy
 import (
 	"math"
 	"time"
+
+	"github.com/soniakeys/meeus/v3/julian"
 )
 
 const (
@@ -199,27 +201,8 @@ func solarPerigeeAnomaly(N, i, omega float64) float64 {
 	return RAD_TO_DEG * 0.5 * math.Atan(tan2nupp)
 }
 
-// JD - Julian Date calculation (Meeus formula 7.1)
-// TODO: to match the JS version, this sets date to local; is this right??
 func JulianDate(t time.Time) float64 {
-	t = t.In(time.UTC)
-	Y := t.Year()
-	M := int(t.Month())
-	D := float64(t.Day()) +
-		float64(t.Hour())/24.0 +
-		float64(t.Minute())/(24.0*60.0) +
-		float64(t.Second())/(24.0*60.0*60.0) +
-		float64(t.Nanosecond())/(24.0*60.0*60.0*1e6) // Using milliseconds
-	if M <= 2 {
-		Y--
-		M += 12
-	}
-
-	A := math.Floor(float64(Y) / 100.0)
-	B := 2 - A + math.Floor(A/4.0)
-	return math.Floor(365.25*(float64(Y)+4716)) +
-		math.Floor(30.6001*(float64(M)+1)) +
-		D + B - 1524.5
+	return julian.TimeToJD(t)
 }
 
 // T - Time in Julian centuries from J2000.0 (Meeus formula 11.1)

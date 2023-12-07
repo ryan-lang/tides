@@ -18,7 +18,7 @@ const NOAA_VAL_TOLERANCE = 0.1               // TODO: why so poor?
 const NOAA_TIME_TOLERANCE = time.Minute * 10 // TODO: why so poor?
 
 func TestGetTimelinePrediction(t *testing.T) {
-	harCon, err := LoadHarmonicConstituentsFromFile("../data/9447130.json")
+	har, err := LoadFromFile("../data/9447130.json")
 	if err != nil {
 		t.Error(err)
 		return
@@ -26,26 +26,23 @@ func TestGetTimelinePrediction(t *testing.T) {
 
 	start := time.Date(2023, 4, 10, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
-	timeline := MakeTimeline(start, end, 10*time.Minute)
-	prediction := &Prediction{
-		Timeline:     timeline,
-		Start:        start,
-		Constituents: harCon,
-	}
+	prediction := har.NewRangePrediction(start, end, WithInterval(time.Minute*10))
 
-	results := prediction.GetTimelinePrediction()
+	results := prediction.Predict()
 	expected := []float64{-0.61741382, -0.48061049, -0.34495767, -0.21117667, -0.07995447, 0.04805437}
 
 	// Check length of results
 	assert.Equal(t, 6, len(results))
 
 	for i, result := range results {
-		assert.LessOrEqual(t, math.Abs(expected[i]-result.Level), VAL_TOLERANCE, fmt.Sprintf("got %f, expected %f", result.Level, expected[i]))
+		offBy := math.Abs(expected[i] - result.Level)
+		fmt.Printf("result: %f at %s (off by %f)\n", result.Level, result.Time, offBy)
+		assert.LessOrEqual(t, offBy, VAL_TOLERANCE, fmt.Sprintf("got %f, expected %f", result.Level, expected[i]))
 	}
 }
 
 func TestGetHighLowPrediction(t *testing.T) {
-	harCon, err := LoadHarmonicConstituentsFromFile("../data/9447130.json")
+	har, err := LoadFromFile("../data/9447130.json")
 	if err != nil {
 		t.Error(err)
 		return
@@ -53,14 +50,10 @@ func TestGetHighLowPrediction(t *testing.T) {
 
 	start := time.Date(2023, 4, 10, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour * 24)
-	timeline := MakeTimeline(start, end, time.Minute)
-	prediction := &Prediction{
-		Timeline:     timeline,
-		Start:        start,
-		Constituents: harCon,
-	}
 
-	results := prediction.GetHighLowPrediction()
+	prediction := har.NewRangePrediction(start, end)
+
+	results := prediction.PredictExtrema()
 	expectedLevel := []float64{1.272675070057166, -0.05582603086323429, 1.2097844518743732, -2.3734349778548514}
 	expectedType := []string{"H", "L", "H", "L"}
 	expectedTime := []time.Time{
@@ -74,9 +67,11 @@ func TestGetHighLowPrediction(t *testing.T) {
 	assert.Equal(t, len(expectedLevel), len(results))
 
 	for i, result := range results {
-		fmt.Printf("result: %s of %f at %s\n", result.Type, result.Level, result.Time)
-		assert.LessOrEqual(t, math.Abs(expectedLevel[i]-result.Level), VAL_TOLERANCE, fmt.Sprintf("got %f, expected %f", result.Level, expectedLevel[i]))
-		assert.LessOrEqual(t, math.Abs(expectedTime[i].Sub(result.Time).Minutes()), TIME_TOLERANCE.Minutes(), fmt.Sprintf("got %s, expected %s", result.Time, expectedTime[i]))
+		valOffBy := math.Abs(expectedLevel[i] - result.Level)
+		timeOffBy := math.Abs(expectedTime[i].Sub(result.Time).Minutes())
+		fmt.Printf("result: %s of %f at %s (off by %f, %fm)\n", result.Type, result.Level, result.Time, valOffBy, timeOffBy)
+		assert.LessOrEqual(t, valOffBy, VAL_TOLERANCE, fmt.Sprintf("got %f, expected %f", result.Level, expectedLevel[i]))
+		assert.LessOrEqual(t, timeOffBy, TIME_TOLERANCE.Minutes(), fmt.Sprintf("got %s, expected %s", result.Time, expectedTime[i]))
 		assert.Equal(t, expectedType[i], result.Type)
 	}
 }
@@ -93,18 +88,14 @@ func TestCompareWithNoaaHighLow(t *testing.T) {
 
 	for _, testStationID := range testStations {
 
-		harCon, err := LoadHarmonicConstituentsFromFile("../data/" + testStationID + ".json")
+		har, err := LoadFromFile("../data/" + testStationID + ".json")
 		if err != nil {
 			t.Error(err)
 		}
 
-		prediction := &Prediction{
-			Timeline:     MakeTimeline(start, end, time.Minute),
-			Start:        start,
-			Constituents: harCon,
-		}
+		prediction := har.NewRangePrediction(start, end)
 
-		localResults := prediction.GetHighLowPrediction()
+		localResults := prediction.PredictExtrema()
 		remoteResults, err := noaaClient.TidePredictions(ctx, &noaaTides.TidePredictionsRequest{
 			StationID: testStationID,
 			Date: &noaaTides.DateParamBeginAndEnd{
@@ -145,18 +136,13 @@ func TestCompareWithNoaaTimeline(t *testing.T) {
 
 	for _, testStationID := range testStations {
 
-		harCon, err := LoadHarmonicConstituentsFromFile("../data/" + testStationID + ".json")
+		har, err := LoadFromFile("../data/" + testStationID + ".json")
 		if err != nil {
 			t.Error(err)
 		}
 
-		prediction := &Prediction{
-			Timeline:     MakeTimeline(start, end, 1*time.Minute),
-			Start:        start,
-			Constituents: harCon,
-		}
-
-		localResults := prediction.GetTimelinePrediction()
+		prediction := har.NewRangePrediction(start, end)
+		localResults := prediction.Predict()
 
 		remotePredictions, err := noaaClient.TidePredictions(ctx, &noaaTides.TidePredictionsRequest{
 			StationID: testStationID,

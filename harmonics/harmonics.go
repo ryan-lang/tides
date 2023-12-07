@@ -7,12 +7,13 @@ import (
 )
 
 const (
-	DEFAULT_TIMELINE_INTERVAL = time.Minute
+	DEFAULT_PREDICTION_INTERVAL = time.Minute
 )
 
 type (
 	Harmonics struct {
 		Constituents []*HarmonicConstituent
+		Datums       []*Datum
 	}
 	HarmonicConstituent struct {
 		Name       string                   `json:"name"`
@@ -40,12 +41,34 @@ type (
 	}
 )
 
-func (h *Harmonics) NewPrediction(start, end time.Time) (*Prediction, error) {
-	return &Prediction{
-		Timeline:     MakeTimeline(start, end, DEFAULT_TIMELINE_INTERVAL),
-		Constituents: h.Constituents,
-		Start:        start,
-	}, nil
+func (h *Harmonics) NewRangePrediction(start, end time.Time, opts ...PredictionOpt) *Prediction {
+	p := &Prediction{
+		Start:     start,
+		End:       end,
+		Interval:  DEFAULT_PREDICTION_INTERVAL,
+		Harmonics: h,
+	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	return p
+}
+
+func (h *Harmonics) NewTimePrediction(t time.Time, opts ...PredictionOpt) *Prediction {
+	p := &Prediction{
+		Start:     t,
+		End:       t,
+		Interval:  DEFAULT_PREDICTION_INTERVAL,
+		Harmonics: h,
+	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	return p
 }
 
 func harmonicResultsAtTime(constituents []*HarmonicConstituent, t time.Time) *harmonicResults {
