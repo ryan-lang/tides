@@ -9,7 +9,7 @@ import (
 	"github.com/olebedev/when"
 	"github.com/olebedev/when/rules/common"
 	"github.com/olebedev/when/rules/en"
-	"github.com/ryan-lang/tides/harmonics"
+	"github.com/ryan-lang/tides"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// load harmonics data
-		har, err := harmonics.LoadFromFile(fmt.Sprintf("%s/%s.json", dataDir, stationId))
+		har, err := tides.LoadHarmonicsFromFile(dataDir, stationId)
 		if err != nil {
 			log.Fatalf("error loading station data: %s", err)
 		}
@@ -71,9 +71,9 @@ to quickly create a Cobra application.`,
 
 		// create a prediction
 		prediction := har.NewRangePrediction(startDate, endDate,
-			harmonics.WithDatum(datum),
-			harmonics.WithUnits(units),
-			harmonics.WithInterval(interval),
+			tides.WithDatum(datum),
+			tides.WithUnits(units),
+			tides.WithInterval(interval),
 		)
 
 		if extrema {

@@ -1,4 +1,4 @@
-package harmonics
+package tides
 
 import (
 	"fmt"

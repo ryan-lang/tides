@@ -17,42 +17,42 @@ type (
 	}
 )
 
-// s
+// Calculates lunar ecliptic longitude and rate of change, variable "s" in Schureman
 func (a *Astro) LunarLongitude() (float64, float64) {
 	return calcValAndSpeed(LUNAR_LONGITUDE, a.Time)
 }
 
-// h
+// Calculates solar ecliptic longitude and rate of change, variable "h" in Schureman
 func (a *Astro) SolarLongitude() (float64, float64) {
 	return calcValAndSpeed(SOLAR_LONGITUDE, a.Time)
 }
 
-// p
+// Calculates lunar perigee and rate of change, variable "p" in Schureman
 func (a *Astro) LunarPerigee() (float64, float64) {
 	return calcValAndSpeed(LUNAR_PERIGEE, a.Time)
 }
 
-// N
+// Calculates lunar node and rate of change, variable "N" in Schureman
 func (a *Astro) LunarNode() (float64, float64) {
 	return calcValAndSpeed(LUNAR_NODE, a.Time)
 }
 
-// pp
+// Calculates solar perigee and rate of change, variable "P" in Schureman
 func (a *Astro) SolarPerigee() (float64, float64) {
 	return calcValAndSpeed(SOLAR_PERIGEE, a.Time)
 }
 
-// omega
+// Calculates terrestrial obliquity and rate of change, variable "omega" in Schureman
 func (a *Astro) TerrestrialObliquity() (float64, float64) {
 	return calcValAndSpeed(TERRESTRIAL_OBLIQUITY, a.Time)
 }
 
-// i
+// Calculates lunar inclination and rate of change, variable "i" in Schureman
 func (a *Astro) LunarInclination() (float64, float64) {
 	return calcValAndSpeed(LUNAR_INCLINATION, a.Time)
 }
 
-// T + h - s
+// Calculates equilibrium argument and rate of change, "T + h - s" in Schureman
 func (a *Astro) EquilibriumArgument() (float64, float64) {
 	hourAngle, hourSpeed := a.hourAngle()
 	sAngle, sSpeed := a.LunarLongitude()
@@ -62,11 +62,12 @@ func (a *Astro) EquilibriumArgument() (float64, float64) {
 	return v, s
 }
 
+// Calculates val and speed of a fixed angle (constant)
 func (a *Astro) FixedAngle(angle float64) (float64, float64) {
 	return calcValAndSpeed([]float64{angle}, a.Time)
 }
 
-// I
+// Calculates inclination angle and rate of change, variable "I" in Schureman
 func (a *Astro) InclinationAngle() float64 {
 	N, _ := a.LunarNode()
 	i, _ := a.LunarInclination()
@@ -74,7 +75,7 @@ func (a *Astro) InclinationAngle() float64 {
 	return modulus(inclinationAngle(N, i, omega), 360)
 }
 
-// xi
+// Calculates lunar elongation and rate of change, variable "xi" in Schureman
 func (a *Astro) LunarElongation() float64 {
 	N, _ := a.LunarNode()
 	i, _ := a.LunarInclination()
@@ -82,7 +83,7 @@ func (a *Astro) LunarElongation() float64 {
 	return modulus(lunarElongation(N, i, omega), 360)
 }
 
-// nu
+// Calculates solar anomaly and rate of change, variable "nu" in Schureman
 func (a *Astro) SolarAnomaly() float64 {
 	N, _ := a.LunarNode()
 	i, _ := a.LunarInclination()
@@ -90,7 +91,7 @@ func (a *Astro) SolarAnomaly() float64 {
 	return modulus(solarAnomaly(N, i, omega), 360)
 }
 
-// nup
+// Calculates lunar perigee anomaly and rate of change, variable "nup" in Schureman
 func (a *Astro) LunarPerigeeAnomaly() float64 {
 	N, _ := a.LunarNode()
 	i, _ := a.LunarInclination()
@@ -98,7 +99,7 @@ func (a *Astro) LunarPerigeeAnomaly() float64 {
 	return modulus(lunarPerigeeAnomaly(N, i, omega), 360)
 }
 
-// nupp
+// Calculates solar perigee anomaly and rate of change, variable "nupp" in Schureman
 func (a *Astro) SolarPerigeeAnomaly() float64 {
 	N, _ := a.LunarNode()
 	i, _ := a.LunarInclination()
@@ -106,13 +107,13 @@ func (a *Astro) SolarPerigeeAnomaly() float64 {
 	return modulus(solarPerigeeAnomaly(N, i, omega), 360)
 }
 
-func (a *Astro) P() float64 { // TODO rename
+// Variable "P" in Schureman
+func (a *Astro) P() float64 {
 	p, _ := a.LunarPerigee()
 	xi := a.LunarElongation()
 	return p - (modulus(xi, 360))
 }
 
-// hour
 func (a *Astro) hourAngle() (float64, float64) {
 	v := (JulianDate(a.Time) - math.Floor(JulianDate(a.Time))) * 360.0
 	return v, 15.0

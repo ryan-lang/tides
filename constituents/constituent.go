@@ -80,18 +80,6 @@ type (
 )
 
 func NewCompoundConstituent(name string, members []CompoundContituentMember) CompoundConstituent {
-	// // members have their coefficients multiplied by their factor
-	// newMembers := make([]CompoundContituentMember, len(members))
-	// copy(newMembers, members)
-
-	// for i, member := range newMembers {
-	// 	newCoefficients := make([]float64, len(member.Constituent.Coefficients))
-	// 	for j, coefficient := range member.Constituent.Coefficients {
-	// 		newCoefficients[j] = coefficient * float64(member.Factor)
-	// 	}
-	// 	newMembers[i].Constituent.Coefficients = newCoefficients
-	// }
-
 	return CompoundConstituent{
 		Name:    name,
 		Members: members,

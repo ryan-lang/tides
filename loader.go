@@ -1,7 +1,8 @@
-package harmonics
+package tides
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 
@@ -10,15 +11,19 @@ import (
 
 type (
 	StationDocument struct {
-		HarmonicConstituents []*HarmonicConstituent `json:"harmonic_constituents"`
+		HarmonicConstituents []*HarmonicConstituent `json:"harmonic_constituents,omitempty"`
 		Datums               []*Datum               `json:"datums"`
+		TidePredOffsets      *TidePredOffsets       `json:"tide_pred_offsets,omitempty"`
 	}
 )
 
-func LoadFromFile(filePath string) (*Harmonics, error) {
+// Loads a Harmonics struct (contituents & datums) from a file
+func LoadHarmonicsFromFile(dataDir, stationId string) (*Harmonics, error) {
+
+	harmonics := &Harmonics{}
 
 	// read the file
-	f, err := os.Open(filePath)
+	f, err := os.Open(fmt.Sprintf("%s/%s.json", dataDir, stationId))
 	if err != nil {
 		return nil, err
 	}
@@ -30,18 +35,30 @@ func LoadFromFile(filePath string) (*Harmonics, error) {
 		return nil, err
 	}
 
-	// associate each constituent with its model
-	for _, c := range doc.HarmonicConstituents {
-		c.Model = GetConstituentForName(c.Name)
+	harmonics.Datums = doc.Datums
+	harmonics.TidePredOffsets = doc.TidePredOffsets
+
+	// if station is a subordiante, load the harmonics from the reference station
+	if doc.TidePredOffsets != nil && doc.TidePredOffsets.RefStationID != "" {
+		refStation, err := LoadHarmonicsFromFile(dataDir, doc.TidePredOffsets.RefStationID)
+		if err != nil {
+			return nil, fmt.Errorf("error loading reference station harmonics (station=%s): %s", doc.TidePredOffsets.RefStationID, err)
+		}
+
+		harmonics.Constituents = refStation.Constituents
+	} else {
+		harmonics.Constituents = doc.HarmonicConstituents
 	}
 
-	return &Harmonics{
-		Constituents: doc.HarmonicConstituents,
-		Datums:       doc.Datums,
-	}, nil
+	// associate each constituent with its model
+	for _, c := range harmonics.Constituents {
+		c.Model = GetConstituentModelForName(c.Name)
+	}
+
+	return harmonics, nil
 }
 
-func GetConstituentForName(name string) HarmonicConstituentModel {
+func GetConstituentModelForName(name string) harmonicConstituentModel {
 	switch name {
 	case "Z0":
 		return &constituents.CONSTITUENT_Z0

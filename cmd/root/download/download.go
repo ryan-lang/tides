@@ -7,6 +7,7 @@ import (
 )
 
 var outputPath string
+var verbose bool
 
 var DownloadCmd = &cobra.Command{
 	Use:   "download",
@@ -24,4 +25,5 @@ to quickly create a Cobra application.`,
 
 func init() {
 	DownloadCmd.PersistentFlags().StringVarP(&outputPath, "output", "o", "./data", "output directory")
+	DownloadCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 }

@@ -1,4 +1,4 @@
-package harmonics
+package tides_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	noaaTides "github.com/ryan-lang/noaa-tidesandcurrents/client/dataApi"
+	"github.com/ryan-lang/tides"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +19,7 @@ const NOAA_VAL_TOLERANCE = 0.1               // TODO: why so poor?
 const NOAA_TIME_TOLERANCE = time.Minute * 10 // TODO: why so poor?
 
 func TestGetTimelinePrediction(t *testing.T) {
-	har, err := LoadFromFile("../data/9447130.json")
+	har, err := tides.LoadHarmonicsFromFile("./data", "9447130")
 	if err != nil {
 		t.Error(err)
 		return
@@ -26,7 +27,7 @@ func TestGetTimelinePrediction(t *testing.T) {
 
 	start := time.Date(2023, 4, 10, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
-	prediction := har.NewRangePrediction(start, end, WithInterval(time.Minute*10))
+	prediction := har.NewRangePrediction(start, end, tides.WithInterval(time.Minute*10))
 
 	results := prediction.Predict()
 	expected := []float64{-0.61741382, -0.48061049, -0.34495767, -0.21117667, -0.07995447, 0.04805437}
@@ -42,7 +43,7 @@ func TestGetTimelinePrediction(t *testing.T) {
 }
 
 func TestGetHighLowPrediction(t *testing.T) {
-	har, err := LoadFromFile("../data/9447130.json")
+	har, err := tides.LoadHarmonicsFromFile("./data", "9447130")
 	if err != nil {
 		t.Error(err)
 		return
@@ -88,7 +89,7 @@ func TestCompareWithNoaaHighLow(t *testing.T) {
 
 	for _, testStationID := range testStations {
 
-		har, err := LoadFromFile("../data/" + testStationID + ".json")
+		har, err := tides.LoadHarmonicsFromFile("./data", testStationID)
 		if err != nil {
 			t.Error(err)
 		}
@@ -136,7 +137,7 @@ func TestCompareWithNoaaTimeline(t *testing.T) {
 
 	for _, testStationID := range testStations {
 
-		har, err := LoadFromFile("../data/" + testStationID + ".json")
+		har, err := tides.LoadHarmonicsFromFile("./data", testStationID)
 		if err != nil {
 			t.Error(err)
 		}

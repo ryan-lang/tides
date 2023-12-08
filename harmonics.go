@@ -1,4 +1,4 @@
-package harmonics
+package tides
 
 import (
 	"time"
@@ -12,18 +12,19 @@ const (
 
 type (
 	Harmonics struct {
-		Constituents []*HarmonicConstituent
-		Datums       []*Datum
+		Constituents    []*HarmonicConstituent
+		Datums          []*Datum
+		TidePredOffsets *TidePredOffsets
 	}
 	HarmonicConstituent struct {
 		Name       string                   `json:"name"`
-		Model      HarmonicConstituentModel `json:"-"`
+		Model      harmonicConstituentModel `json:"-"`
 		PhaseUTC   float64                  `json:"phase_UTC"`
 		PhaseLocal float64                  `json:"phase_local"` // TODO how/hwere is this used
 		Amplitude  float64                  `json:"amplitude"`
 		Speed      float64                  `json:"speed"` // TODO how/hwere is this used
 	}
-	HarmonicConstituentModel interface {
+	harmonicConstituentModel interface {
 		GetName() string
 		Speed(*astronomy.Astro) float64
 		Value(*astronomy.Astro) float64
@@ -31,22 +32,27 @@ type (
 		FormFactor(*astronomy.Astro) float64
 	}
 
-	harmonicResults struct {
-		values map[string]float64
-		speeds map[string]float64
+	harmonicResults map[string]harmonicResult
+	harmonicFactors map[string]harmonicFactor
+
+	harmonicResult struct {
+		speed float64
+		value float64
 	}
-	harmonicFactors struct {
-		nodes map[string]float64
-		forms map[string]float64
+	harmonicFactor struct {
+		node float64
+		form float64
 	}
 )
 
+// Creates a new Prediction struct for a date range with the given start and end times. Optionally accepts PredictionOpts
 func (h *Harmonics) NewRangePrediction(start, end time.Time, opts ...PredictionOpt) *Prediction {
 	p := &Prediction{
-		Start:     start,
-		End:       end,
-		Interval:  DEFAULT_PREDICTION_INTERVAL,
-		Harmonics: h,
+		Start:           start,
+		End:             end,
+		Interval:        DEFAULT_PREDICTION_INTERVAL,
+		Harmonics:       h,
+		extendedResults: make([]*PredictionValue, 0),
 	}
 
 	for _, opt := range opts {
@@ -56,12 +62,14 @@ func (h *Harmonics) NewRangePrediction(start, end time.Time, opts ...PredictionO
 	return p
 }
 
+// Creates a new Prediction struct for a single point in time. Optionally accepts PredictionOpts
 func (h *Harmonics) NewTimePrediction(t time.Time, opts ...PredictionOpt) *Prediction {
 	p := &Prediction{
-		Start:     t,
-		End:       t,
-		Interval:  DEFAULT_PREDICTION_INTERVAL,
-		Harmonics: h,
+		Start:           t,
+		End:             t,
+		Interval:        DEFAULT_PREDICTION_INTERVAL,
+		Harmonics:       h,
+		extendedResults: make([]*PredictionValue, 0),
 	}
 
 	for _, opt := range opts {
@@ -71,13 +79,10 @@ func (h *Harmonics) NewTimePrediction(t time.Time, opts ...PredictionOpt) *Predi
 	return p
 }
 
-func harmonicResultsAtTime(constituents []*HarmonicConstituent, t time.Time) *harmonicResults {
+func harmonicResultsAtTime(constituents []*HarmonicConstituent, t time.Time) harmonicResults {
 
 	// Create maps to store base values and speeds for each constituent.
-	result := &harmonicResults{
-		values: make(map[string]float64),
-		speeds: make(map[string]float64),
-	}
+	result := harmonicResults{}
 
 	// Initialize the starting astronomical conditions based on the prediction start time.
 	astro := &astronomy.Astro{Time: t}
@@ -86,19 +91,18 @@ func harmonicResultsAtTime(constituents []*HarmonicConstituent, t time.Time) *ha
 	for _, constituent := range constituents {
 		value := constituent.Model.Value(astro)
 		speed := constituent.Model.Speed(astro)
-		result.values[constituent.Name] = astronomy.DEG_TO_RAD * value
-		result.speeds[constituent.Name] = astronomy.DEG_TO_RAD * speed
+		result[constituent.Name] = harmonicResult{
+			value: astronomy.DEG_TO_RAD * value,
+			speed: astronomy.DEG_TO_RAD * speed,
+		}
 	}
 
 	return result
 }
 
-func harmonicFactorsAtTime(constituents []*HarmonicConstituent, t time.Time) *harmonicFactors {
+func harmonicFactorsAtTime(constituents []*HarmonicConstituent, t time.Time) harmonicFactors {
 
-	factors := &harmonicFactors{
-		nodes: make(map[string]float64),
-		forms: make(map[string]float64),
-	}
+	factors := harmonicFactors{}
 
 	stepAstro := &astronomy.Astro{Time: t}
 
@@ -108,8 +112,10 @@ func harmonicFactorsAtTime(constituents []*HarmonicConstituent, t time.Time) *ha
 		nodeFactor := modulus(constituent.Model.NodeFactor(stepAstro), 360)
 		formFactor := modulus(constituent.Model.FormFactor(stepAstro), 360)
 
-		factors.nodes[constituent.Name] = astronomy.DEG_TO_RAD * nodeFactor
-		factors.forms[constituent.Name] = formFactor
+		factors[constituent.Name] = harmonicFactor{
+			node: astronomy.DEG_TO_RAD * nodeFactor,
+			form: formFactor,
+		}
 	}
 
 	return factors
