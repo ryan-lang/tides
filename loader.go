@@ -10,6 +10,7 @@ import (
 )
 
 type (
+	// Represents the expected schema of the json file containing station data.
 	StationDocument struct {
 		HarmonicConstituents []*HarmonicConstituent `json:"harmonic_constituents,omitempty"`
 		Datums               []*Datum               `json:"datums"`
@@ -17,7 +18,9 @@ type (
 	}
 )
 
-// Loads a Harmonics struct (contituents & datums) from a file
+// Helper function for loading station data (harmonic constituents, datums, and tide prediction offsets) from a file.
+// The station files should be stored in a data directory, and named <stationid>.json. See `StationDocument` for expected
+// file schema.
 func LoadHarmonicsFromFile(dataDir, stationId string) (*Harmonics, error) {
 
 	harmonics := &Harmonics{}

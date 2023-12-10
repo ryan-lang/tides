@@ -1,3 +1,4 @@
 *.csv
 data/*.json
 .vscode
+!data/9447130.json

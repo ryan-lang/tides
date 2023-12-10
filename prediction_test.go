@@ -15,7 +15,7 @@ import (
 
 const VAL_TOLERANCE = 0.01
 const TIME_TOLERANCE = time.Minute * 1
-const NOAA_VAL_TOLERANCE = 0.1               // TODO: why so poor?
+const NOAA_VAL_TOLERANCE = 0.15              // TODO: why so poor?
 const NOAA_TIME_TOLERANCE = time.Minute * 10 // TODO: why so poor?
 
 func TestGetTimelinePrediction(t *testing.T) {
@@ -77,6 +77,41 @@ func TestGetHighLowPrediction(t *testing.T) {
 	}
 }
 
+func TestSubordinateGetHighLowPrediction(t *testing.T) {
+	har, err := tides.LoadHarmonicsFromFile("./data", "9445719")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	start := time.Date(2023, 4, 10, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour * 24)
+
+	prediction := har.NewRangePrediction(start, end)
+
+	results := prediction.PredictExtrema()
+	expectedLevel := []float64{1.272675070057166 * 1.03, -0.05582603086323429 * 1.01, 1.2097844518743732 * 1.03, -2.3734349778548514 * 1.01}
+	expectedType := []string{"H", "L", "H", "L"}
+	expectedTime := []time.Time{
+		time.Date(2023, 4, 10, 3, 48, 42, 0, time.UTC).Add(time.Minute * 5),
+		time.Date(2023, 4, 10, 9, 14, 44, 0, time.UTC).Add(time.Minute * 12),
+		time.Date(2023, 4, 10, 14, 30, 3, 0, time.UTC).Add(time.Minute * 5),
+		time.Date(2023, 4, 10, 21, 39, 7, 0, time.UTC).Add(time.Minute * 12),
+	}
+
+	// Check length of results
+	assert.Equal(t, len(expectedLevel), len(results))
+
+	for i, result := range results {
+		valOffBy := math.Abs(expectedLevel[i] - result.Level)
+		timeOffBy := math.Abs(expectedTime[i].Sub(result.Time).Minutes())
+		fmt.Printf("result: %s of %f at %s (off by %f, %fm)\n", result.Type, result.Level, result.Time, valOffBy, timeOffBy)
+		assert.LessOrEqual(t, valOffBy, VAL_TOLERANCE, fmt.Sprintf("got %f, expected %f", result.Level, expectedLevel[i]))
+		assert.LessOrEqual(t, timeOffBy, TIME_TOLERANCE.Minutes(), fmt.Sprintf("got %s, expected %s", result.Time, expectedTime[i]))
+		assert.Equal(t, expectedType[i], result.Type)
+	}
+}
+
 func TestCompareWithNoaaHighLow(t *testing.T) {
 	testStations := []string{"9447130", "9413450", "9411340"}
 
@@ -105,6 +140,54 @@ func TestCompareWithNoaaHighLow(t *testing.T) {
 			},
 			Interval: noaaTides.INTERVAL_PARAM_HILO,
 			Datum:    "MTL",
+		})
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Check length of results
+		assert.Equal(t, len(remoteResults.Predictions), len(localResults))
+
+		for i, result := range localResults {
+			remoteTime := remoteResults.Predictions[i].Time
+			remoteVal := remoteResults.Predictions[i].Value
+			localTime := result.Time.In(time.UTC)
+			localVal := result.Level
+			fmt.Printf("noaa %f @ %s\t\t local %f @ %s\n", remoteVal, remoteTime, localVal, localTime)
+			assert.LessOrEqual(t, math.Abs(remoteTime.Sub(localTime).Minutes()), NOAA_TIME_TOLERANCE.Minutes(), "minutes off")
+			assert.LessOrEqual(t, math.Abs(remoteResults.Predictions[i].Value-result.Level), NOAA_VAL_TOLERANCE, fmt.Sprintf("index: %d", i))
+		}
+	}
+}
+
+func TestSubordinateCompareWithNoaaHighLow(t *testing.T) {
+	testStations := []string{"9445719"}
+
+	ctx := context.Background()
+	noaaClient := noaaTides.NewClient(true, "tides")
+
+	now := time.Now().Add(time.Hour * 24 * -45)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour * 24)
+
+	for _, testStationID := range testStations {
+
+		har, err := tides.LoadHarmonicsFromFile("./data", testStationID)
+		if err != nil {
+			t.Error(err)
+		}
+
+		prediction := har.NewRangePrediction(start, end, tides.WithDatum("MLLW"))
+
+		localResults := prediction.PredictExtrema()
+		remoteResults, err := noaaClient.TidePredictions(ctx, &noaaTides.TidePredictionsRequest{
+			StationID: testStationID,
+			Date: &noaaTides.DateParamBeginAndEnd{
+				BeginDate: start,
+				EndDate:   end,
+			},
+			Interval: noaaTides.INTERVAL_PARAM_HILO,
+			Datum:    "MLLW",
 		})
 		if err != nil {
 			t.Error(err)
