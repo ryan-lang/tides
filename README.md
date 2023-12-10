@@ -11,7 +11,7 @@ Place the harmonic data for your desired station(s) in the data directory (as sp
 ## CLI
 ```bash
 # install the binary
-go install github.com/ryan-lang/tides/cmd@latest
+go install github.com/ryan-lang/tides/cmd/tides@latest
 
 # download the station metadata from NOAA
 tides download noaaStation --station 9445719
