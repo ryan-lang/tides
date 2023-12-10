@@ -1,6 +1,6 @@
 # tides: go library & cli
 
-A tide prediction calculator that uses harmonic constituent data and astronomy math to provide tide predictions.
+A tide prediction calculator that uses harmonic constituent data and astronomy math to provide tide predictions in go.
 
 Please do not use this package if it's mission-critical for the tides to be accurate, such as in marine navigation. For all other purposes, it seems to do a pretty good job.
 
